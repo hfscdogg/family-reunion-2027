@@ -84,7 +84,10 @@ export async function getAppState(): Promise<AppState> {
     FROM votes
   `;
 
-  const options: Option[] = optionsResult.rows as Option[];
+  const options: Option[] = optionsResult.rows.map((row) => ({
+    ...row,
+    is_writein: row.is_writein === true || row.is_writein === "t",
+  })) as Option[];
   const votes: Vote[] = votesResult.rows as Vote[];
 
   const tallies: Record<string, Tally> = {};

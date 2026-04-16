@@ -109,7 +109,7 @@ export default function Home() {
   // Poll for state
   const fetchState = useCallback(async () => {
     try {
-      const res = await fetch("/api/state");
+      const res = await fetch("/api/state", { cache: "no-store" });
       if (res.ok) {
         const data: AppState = await res.json();
         setState(data);
@@ -285,9 +285,16 @@ export default function Home() {
                 />
               </div>
               {tally && tally.voters.length > 0 && (
-                <p className="text-xs text-gray-400 mt-1.5">
-                  {tally.voters.join(", ")}
-                </p>
+                <div className="flex flex-wrap gap-1 mt-2">
+                  {tally.voters.map((voter) => (
+                    <span
+                      key={voter}
+                      className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full"
+                    >
+                      {voter}
+                    </span>
+                  ))}
+                </div>
               )}
             </button>
           );
@@ -347,9 +354,16 @@ export default function Home() {
                     />
                   </div>
                   {tally && tally.voters.length > 0 && (
-                    <p className="text-xs text-gray-400 mt-1.5">
-                      {tally.voters.join(", ")}
-                    </p>
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {tally.voters.map((voter) => (
+                        <span
+                          key={voter}
+                          className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full"
+                        >
+                          {voter}
+                        </span>
+                      ))}
+                    </div>
                   )}
                 </button>
               );
