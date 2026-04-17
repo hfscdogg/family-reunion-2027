@@ -1,7 +1,5 @@
 import { sql } from "@vercel/postgres";
-import { neonConfig } from "@neondatabase/serverless";
 import type { Option, Vote, Tally, AppState } from "./types";
-neonConfig.fetchOptions = { cache: "no-store" };
 export const SEED_OPTIONS = [
   {
     id: "outer-banks",
