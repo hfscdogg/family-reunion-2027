@@ -17,36 +17,27 @@ async function fetchWithRetry(
   options: RequestInit,
   retries: number[] = RETRY_DELAYS
 ): Promise<Response> {
+  const attempts = [0, ...retries];
   let lastError: Error | null = null;
 
-  // First attempt
-  try {
-    const res = await fetch(url, options);
-    if (res.ok) return res;
-    const body = await res.json().catch(() => ({ error: "Request failed" }));
-    if (res.status === 400) {
-      // Client errors should not be retried
-      throw new Error(body.error || "Bad request");
+  for (let i = 0; i < attempts.length; i++) {
+    if (i > 0) {
+      await new Promise((resolve) => setTimeout(resolve, attempts[i]));
     }
-    lastError = new Error(body.error || `Server error (${res.status})`);
-  } catch (err) {
-    if (err instanceof Error && err.message && !err.message.includes("Server error")) {
-      // Re-throw client errors (400s) immediately
-      throw err;
-    }
-    lastError = err instanceof Error ? err : new Error("Request failed");
-  }
-
-  // Retry attempts
-  for (const delay of retries) {
-    await new Promise((resolve) => setTimeout(resolve, delay));
     try {
       const res = await fetch(url, options);
       if (res.ok) return res;
       const body = await res.json().catch(() => ({ error: "Request failed" }));
+      if (res.status >= 400 && res.status < 500) {
+        throw new Error(body.error || "Bad request");
+      }
       lastError = new Error(body.error || `Server error (${res.status})`);
     } catch (err) {
-      lastError = err instanceof Error ? err : new Error("Request failed");
+      const error = err instanceof Error ? err : new Error("Request failed");
+      if (error.message && !error.message.startsWith("Server error")) {
+        throw error;
+      }
+      lastError = error;
     }
   }
 
@@ -106,10 +97,9 @@ export default function Home() {
     }
   }, [name]);
 
-  // Poll for state
   const fetchState = useCallback(async () => {
     try {
-      const res = await fetch("/api/state", { cache: "no-store" });
+      const res = await fetch(`/api/state?_t=${Date.now()}`);
       if (res.ok) {
         const data: AppState = await res.json();
         setState(data);
@@ -132,6 +122,57 @@ export default function Home() {
     }
 
     setVotingFor(optionId);
+
+    // Optimistic update: show the vote immediately in the UI
+    setState((prev) => {
+      if (!prev) return prev;
+      const trimmedName = name.trim();
+      const lowerName = trimmedName.toLowerCase();
+      const oldVote = prev.votes.find((v) => v.voter_name === lowerName);
+      const oldOptionId = oldVote?.option_id;
+
+      const newVotes = oldVote
+        ? prev.votes.map((v) =>
+            v.voter_name === lowerName
+              ? { ...v, option_id: optionId, voter_display_name: trimmedName }
+              : v
+          )
+        : [
+            ...prev.votes,
+            {
+              voter_name: lowerName,
+              voter_display_name: trimmedName,
+              option_id: optionId,
+              updated_at: new Date().toISOString(),
+            },
+          ];
+
+      const newTallies = { ...prev.tallies };
+      for (const key of Object.keys(newTallies)) {
+        newTallies[key] = { ...newTallies[key], voters: [...newTallies[key].voters] };
+      }
+
+      if (oldOptionId && newTallies[oldOptionId]) {
+        newTallies[oldOptionId] = {
+          ...newTallies[oldOptionId],
+          count: newTallies[oldOptionId].count - 1,
+          voters: newTallies[oldOptionId].voters.filter(
+            (v) => v.toLowerCase() !== lowerName
+          ),
+        };
+      }
+
+      if (newTallies[optionId]) {
+        newTallies[optionId] = {
+          ...newTallies[optionId],
+          count: newTallies[optionId].count + 1,
+          voters: [...newTallies[optionId].voters, trimmedName],
+        };
+      }
+
+      return { ...prev, votes: newVotes, tallies: newTallies };
+    });
+
     try {
       await fetchWithRetry("/api/vote", {
         method: "POST",
@@ -143,6 +184,7 @@ export default function Home() {
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to save vote";
       showToast(msg, "error");
+      await fetchState();
     } finally {
       setVotingFor(null);
     }
