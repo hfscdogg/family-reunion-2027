@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getAppState } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
+export const fetchCache = "force-no-store";
 
 const NO_CACHE_HEADERS = {
   "Cache-Control": "no-store, no-cache, must-revalidate",
